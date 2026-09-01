@@ -1,0 +1,104 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(resource) {
+      return signedIn() && resource.data.user_id == request.auth.uid;
+    }
+
+    function ownsRequest() {
+      return signedIn() && request.resource.data.user_id == request.auth.uid;
+    }
+
+    function ownsRoutine(routineId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/routines/$(routineId)).data.user_id == request.auth.uid;
+    }
+
+    function ownsDayPlan(dayPlan) {
+      return ownsRoutine(dayPlan.data.routine_id);
+    }
+
+    function ownsActivity(activity) {
+      return activity.data.day_plan_id != null
+        ? ownsDayPlan(get(/databases/$(database)/documents/dayPlans/$(activity.data.day_plan_id)))
+        : ownsRoutine(activity.data.day_cycle_id);
+    }
+
+    function ownsActivityInstance(instance) {
+      return ownsActivity(get(/databases/$(database)/documents/activities/$(instance.data.activity_id)));
+    }
+
+    function ownsLog(log) {
+      return ownsActivityInstance(get(/databases/$(database)/documents/activityInstances/$(log.data.activity_instance_id)));
+    }
+
+    function ownsLogRequest() {
+      return ownsActivityInstance(get(/databases/$(database)/documents/activityInstances/$(request.resource.data.activity_instance_id)));
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && userId == request.auth.uid;
+    }
+
+    match /routines/{routineId} {
+      allow read: if owns(resource);
+      allow create: if ownsRequest();
+      allow update: if owns(resource) && ownsRequest();
+      allow delete: if owns(resource);
+    }
+
+    match /dayPlans/{dayPlanId} {
+      allow read: if ownsDayPlan(resource);
+      allow create: if ownsRoutine(request.resource.data.routine_id);
+      allow update: if ownsDayPlan(resource) && ownsRoutine(request.resource.data.routine_id);
+      allow delete: if ownsDayPlan(resource);
+    }
+
+    match /dayCycles/{dayCycleId} {
+      allow read: if owns(resource);
+      allow create: if ownsRequest();
+      allow update: if owns(resource) && ownsRequest();
+      allow delete: if owns(resource);
+    }
+
+    match /activities/{activityId} {
+      allow read: if ownsActivity(resource);
+      allow create: if ownsActivity(request.resource);
+      allow update: if ownsActivity(resource) && ownsActivity(request.resource);
+      allow delete: if ownsActivity(resource);
+    }
+
+    match /activityInstances/{instanceId} {
+      allow read: if ownsActivityInstance(resource);
+      allow create: if ownsActivityInstance(request.resource);
+      allow update: if ownsActivityInstance(resource) && ownsActivityInstance(request.resource);
+      allow delete: if ownsActivityInstance(resource);
+    }
+
+    match /breakLogs/{breakLogId} {
+      allow read: if ownsLog(resource);
+      allow create: if ownsLogRequest();
+      allow update: if ownsLog(resource) && ownsLogRequest();
+      allow delete: if ownsLog(resource);
+    }
+
+    match /interruptionLogs/{interruptionLogId} {
+      allow read: if ownsLog(resource);
+      allow create: if ownsLogRequest();
+      allow update: if ownsLog(resource) && ownsLogRequest();
+      allow delete: if ownsLog(resource);
+    }
+
+    match /alarms/{alarmId} {
+      allow read: if owns(resource);
+      allow create: if ownsRequest();
+      allow update: if owns(resource) && ownsRequest();
+      allow delete: if owns(resource);
+    }
+  }
+}
