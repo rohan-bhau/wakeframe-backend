@@ -16,6 +16,7 @@ const DAY_PLAN_ID = 'day-plan-owner';
 const ACTIVITY_ID = 'activity-owner';
 const INSTANCE_ID = 'instance-owner';
 const BREAK_LOG_ID = 'break-owner';
+const NESTED_ACTIVITY_PATH = `users/${OWNER_ID}/activities/activity-nested`;
 
 let testEnv: RulesTestEnvironment;
 
@@ -73,6 +74,7 @@ async function seedOwnerGraph() {
     await setDoc(doc(admin, paths.activities), activity());
     await setDoc(doc(admin, paths.activityInstances), activityInstance());
     await setDoc(doc(admin, paths.breakLogs), breakLog());
+    await setDoc(doc(admin, NESTED_ACTIVITY_PATH), { title: 'Nested activity' });
   });
 }
 
@@ -123,6 +125,16 @@ describe('Firestore security rules', function () {
 
   it('allows a user to read and write their own BreakLog', async () => {
     await assertCanReadAndWrite(paths.breakLogs, breakLog());
+  });
+
+  it('allows a user to read and write activities in their user subcollection', async () => {
+    await assertCanReadAndWrite(NESTED_ACTIVITY_PATH, { title: 'Updated activity' });
+  });
+
+  it("rejects another user from reading or writing the owner's activity subcollection", async () => {
+    const other = testEnv.authenticatedContext(OTHER_USER_ID).firestore();
+    await assertFails(getDoc(doc(other, NESTED_ACTIVITY_PATH)));
+    await assertFails(setDoc(doc(other, NESTED_ACTIVITY_PATH), { unauthorized: true }, { merge: true }));
   });
 
   for (const [collection, path] of Object.entries(paths)) {
